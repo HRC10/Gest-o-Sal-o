@@ -40,3 +40,33 @@
 .read-the-docs {
   color: #888;
 }
+body, html {
+  overflow-x: hidden; /* Evita a rolagem lateral que causa o efeito de zoom */
+  width: 100%;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none; /* Esconde a barra de rolagem na esteira para ficar mais bonito */
+}
+/* Impede que o navegador mobile dê zoom automático em inputs */
+@media screen and (max-width: 768px) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Garante que nada saia da tela lateralmente */
+body {
+  overflow-x: hidden;
+  position: relative;
+  width: 100%;
+}
+
+/* Esconde a barra de rolagem da esteira mantendo a função de scroll */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
