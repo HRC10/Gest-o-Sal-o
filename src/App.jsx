@@ -10,6 +10,7 @@ function App() {
   const [aviso, setAviso] = useState({ aberto: false, titulo: '', mensagem: '' });
   const [confirmacao, setConfirmacao] = useState({ aberto: false, item: null });
   const [idEditando, setIdEditando] = useState(null);
+  const [listaClientes, setListaClientes] = useState([]);
 
   // Estados para a Lista e Agendamentos
   const [listaAgendamentos, setListaAgendamentos] = useState([]);
@@ -47,9 +48,11 @@ function App() {
   useEffect(() => {
     buscarAgendamentos();
   }, []);
-  // --- SALVAR DADOS (CREATE) ---
+  // --- SALVAR DADOS (CREATE / UPDATE) ---
   async function handleSalvar(e) {
     e.preventDefault();
+
+    // 1. Validações Iniciais
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
     const dataSelecionada = new Date(data + 'T00:00:00');
@@ -65,7 +68,7 @@ function App() {
     }
 
     try {
-      // Verificação de Disponibilidade
+      // 2. Verificação de Disponibilidade (Apenas se não for edição do mesmo horário)
       const { data: existente, error: erroBusca } = await supabase
         .from('agendamentos')
         .select('id, cliente_nome')
@@ -75,54 +78,62 @@ function App() {
 
       if (erroBusca) throw erroBusca;
 
-      if (existente) {
+      // Se existe alguém no horário e não é o agendamento que estamos editando
+      if (existente && existente.id !== idEditando) {
         mostrarAlerta("Horário Ocupado", `Atenção: Este horário já está ocupado por ${existente.cliente_nome}.`);
         return;
       }
 
-      // Inserção no Banco
-      // Se tiver idEditando, faz UPDATE. Se não, faz INSERT.
-    if (idEditando) {
-      const { error } = await supabase
-        .from('agendamentos')
-        .update({ 
-          cliente_nome: nomeCliente, 
-          telefone, 
-          data, 
-          hora, 
-          servico 
-        })
-        .eq('id', idEditando);
+      // 3. Salvar/Atualizar o Agendamento
+      let erroOperacao;
+      if (idEditando) {
+        const { error } = await supabase
+          .from('agendamentos')
+          .update({ cliente_nome: nomeCliente, telefone, data, hora, servico })
+          .eq('id', idEditando);
+        erroOperacao = error;
+      } else {
+        const { error } = await supabase
+          .from('agendamentos')
+          .insert([{ cliente_nome: nomeCliente, telefone, data, hora, servico }]);
+        erroOperacao = error;
+      }
 
-      if (error) throw error;
-      mostrarAlerta("Atualizado", "O agendamento foi alterado com sucesso!");
-    } else {
-      const { error } = await supabase
-        .from('agendamentos')
-        .insert([{ cliente_nome: nomeCliente, telefone, data, hora, servico }]);
+      if (erroOperacao) throw erroOperacao;
 
-      if (error) throw error;
-      mostrarAlerta("Sucesso", "Agendamento realizado com sucesso!");
-    }
+      // 4. Sincronizar com a Tabela de Clientes (UPSERT)
+      // Fazemos isso DEPOIS que o agendamento deu certo
+     // Garanta que o 'onConflict' esteja apontando para a coluna correta (nome)
+const { error: erroUpsert } = await supabase
+  .from('clientes')
+  .upsert(
+    { 
+      nome: nomeCliente, 
+      telefone: telefone 
+    }, 
+    { onConflict: 'nome' } 
+  );
+      if (erroUpsert) console.error("Erro ao sincronizar cliente:", erroUpsert.message);
 
-    // Limpa tudo
-    setIdEditando(null);
-    setNomeCliente('');
-
-      mostrarAlerta("Sucesso", "Agendamento realizado com sucesso!");
+      // 5. Sucesso e Limpeza
+      mostrarAlerta(idEditando ? "Atualizado" : "Sucesso", "Dados salvos com sucesso!");
       
+      // Limpar estados
       setNomeCliente('');
       setTelefone('');
       setData('');
       setHora('');
+      setIdEditando(null);
       setModalAberto(false);
-      buscarAgendamentos();
-      
+
+      // Atualizar as duas listas na tela
+      await buscarAgendamentos();
+      await buscarClientes();
+
     } catch (error) {
-      mostrarAlerta("Erro", "Erro ao processar agendamento: " + error.message);
+      mostrarAlerta("Erro", "Erro ao processar: " + error.message);
     }
   }
-
   // --- LÓGICA DE CANCELAMENTO ---
   function solicitarCancelamento(item) {
     setConfirmacao({ aberto: true, item: item });
@@ -162,6 +173,34 @@ function App() {
       mostrarAlerta("Erro", "Não foi possível cancelar: " + error.message);
     }
   }
+  async function buscarClientes() {
+    setListaClientes([]);
+  try {
+    const { data, error } = await supabase
+      .from('clientes')
+      .select('*')
+      .order('nome', { ascending: true });
+
+    if (error) throw error;
+    
+    console.log("Clientes carregados:", data); // Isso ajudará a ver no F12 se os dados chegaram
+    setListaClientes(data || []);
+  } catch (error) {
+    console.error("Erro ao buscar clientes:", error.message);
+  }
+}
+useEffect(() => {
+  // Carrega tudo assim que o site abre
+  buscarAgendamentos();
+  buscarClientes();
+}, []);
+
+// Garante que ao trocar de aba, os dados mais frescos sejam puxados
+useEffect(() => {
+  if (abaAtiva === 'clientes') {
+    buscarClientes();
+  }
+}, [abaAtiva]);
 
   // --- FUNÇÃO WHATSAPP ---
   const enviarWhatsApp = (item) => {
@@ -201,81 +240,131 @@ function prepararEdicao(item) {
 
       {/* CONTEÚDO PRINCIPAL */}
       <main className="flex-1 ml-72 p-12">
-        <header className="flex justify-between items-center mb-12">
-          <div>
-            <h2 className="text-4xl font-serif">Olá, Gabrieli!</h2>
-            <p className="text-gray-500 mt-1">Sua agenda atualizada em tempo real.</p>
-          </div>
-          <button 
-            onClick={() => setModalAberto(true)}
-            className="bg-[#A67C52] hover:bg-[#8B6543] text-white px-8 py-4 rounded-full font-bold shadow-lg transition-all transform hover:scale-105"
-          >
-            + Novo Agendamento
-          </button>
-        </header>
-
-        {/* CARDS */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
-          <div className="bg-white p-8 rounded-[2rem] border border-[#EAD7CC] shadow-sm">
-            <Calendar className="text-[#A67C52] mb-4" size={24}/>
-            <h3 className="text-gray-400 text-xs uppercase font-bold tracking-widest">Agendamentos Totais</h3>
-            <p className="text-4xl font-serif mt-2">{listaAgendamentos.length}</p>
-          </div>
-          <div className="bg-white p-8 rounded-[2rem] border border-[#EAD7CC] shadow-sm">
-            <DollarSign className="text-[#A67C52] mb-4" size={24}/>
-            <h3 className="text-gray-400 text-xs uppercase font-bold tracking-widest">Faturamento Estimado</h3>
-            <p className="text-4xl font-serif mt-2">R$ 0,00</p>
-          </div>
-        </div>
-
-        {/* LISTA DE AGENDAMENTOS */}
-        {/* LISTA DE AGENDAMENTOS COM CORES VIVAS */}
-<div className="divide-y divide-gray-100">
-  {listaAgendamentos.map((item) => (
-    <div key={item.id} className="p-6 flex items-center justify-between hover:bg-[#FDF6F3] transition group">
-      <div className="flex items-center gap-6">
-        <div className="text-center min-w-[60px] bg-[#F9F1ED] p-3 rounded-2xl">
-          <span className="block text-xl font-serif text-[#A67C52] font-bold">{item.hora.substring(0,5)}</span>
-          <span className="text-[10px] text-[#A67C52]/70 uppercase font-bold">{new Date(item.data).toLocaleDateString('pt-BR', {day: '2-digit', month: 'short'})}</span>
-        </div>
-        <div>
-          <p className="font-bold text-lg text-[#5D4037]">{item.cliente_nome}</p>
-          <p className="text-xs text-gray-400 uppercase tracking-widest font-medium">{item.servico} • {item.telefone}</p>
-        </div>
-      </div>
-      
-      <div className="flex items-center gap-2">
-        {/* BOTÃO WHATSAPP - VERDE VIVO */}
-        <button 
-          onClick={() => enviarWhatsApp(item)}
-          className="p-3 bg-green-50 text-green-600 rounded-xl hover:bg-green-600 hover:text-white transition-all shadow-sm"
-          title="Confirmar via WhatsApp"
-        >
-          <MessageCircle size={20} fill="currentColor" fillOpacity={0.1} />
-        </button>
-
-        {/* BOTÃO EDITAR - MARROM/BEGE */}
-        <button 
-          onClick={() => prepararEdicao(item)}
-          className="p-3 bg-[#F9F1ED] text-[#A67C52] rounded-xl hover:bg-[#A67C52] hover:text-white transition-all shadow-sm"
-          title="Editar Horário"
-        >
-          <Scissors size={20} />
-        </button>
-
-        {/* BOTÃO EXCLUIR - VERMELHO VIVO */}
-        <button 
-          onClick={() => solicitarCancelamento(item)}
-          className="p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-all shadow-sm"
-          title="Cancelar"
-        >
-          <X size={20} />
-        </button>
-      </div>
+  <header className="flex justify-between items-center mb-12">
+    <div>
+      <h2 className="text-4xl font-serif">Olá, Joanes!</h2>
+      <p className="text-gray-500 mt-1">
+        {abaAtiva === 'agenda' ? 'Sua agenda atualizada em tempo real.' : 'Gerencie sua base de clientes e histórico.'}
+      </p>
     </div>
-  ))}
-</div>
-      </main>
+    
+    {abaAtiva === 'agenda' && (
+      <button 
+        onClick={() => {
+          setIdEditando(null); // Garante que o modal abra limpo
+          setModalAberto(true);
+        }}
+        className="bg-[#A67C52] hover:bg-[#8B6543] text-white px-8 py-4 rounded-full font-bold shadow-lg transition-all transform hover:scale-105"
+      >
+        + Novo Agendamento
+      </button>
+    )}
+  </header>
+
+  {/* CARDS DE RESUMO (Mantendo o que você já tinha e melhorando) */}
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
+    <div className="bg-white p-8 rounded-[2rem] border border-[#EAD7CC] shadow-sm">
+      <Calendar className="text-[#A67C52] mb-4" size={24}/>
+      <h3 className="text-gray-400 text-xs uppercase font-bold tracking-widest">Agendamentos</h3>
+      <p className="text-4xl font-serif mt-2">{listaAgendamentos.length}</p>
+    </div>
+
+      <div className="bg-white p-8 rounded-[2rem] border border-[#EAD7CC] shadow-sm">
+      <Users className="text-[#A67C52] mb-4" size={24}/>
+      <h3 className="text-gray-400 text-xs uppercase font-bold tracking-widest">Total Clientes</h3>
+      {/* Aqui deve ser listaClientes.length */}
+      <p className="text-4xl font-serif mt-2">{listaClientes.length}</p>
+    </div>
+
+    <div className="bg-white p-8 rounded-[2rem] border border-[#EAD7CC] shadow-sm">
+      <DollarSign className="text-[#A67C52] mb-4" size={24}/>
+      <h3 className="text-gray-400 text-xs uppercase font-bold tracking-widest">Faturamento</h3>
+      <p className="text-4xl font-serif mt-2">R$ 0,00</p>
+    </div>
+  </div>
+
+  {/* CONTEÚDO DINÂMICO (AGENDA OU CLIENTES) */}
+  <div className="bg-white rounded-[2rem] shadow-xl border border-[#EAD7CC] overflow-hidden">
+    {abaAtiva === 'agenda' ? (
+      <>
+        <div className="p-8 border-b border-gray-50 flex justify-between items-center">
+          <h3 className="text-2xl font-serif">Próximos Horários</h3>
+          {carregando && <Loader2 className="animate-spin text-[#A67C52]" size={20} />}
+        </div>
+        <div className="divide-y divide-gray-50">
+          {listaAgendamentos.length > 0 ? (
+            listaAgendamentos.map((item) => (
+              <div key={item.id} className="p-6 flex items-center justify-between hover:bg-[#FDF6F3] transition group">
+                <div className="flex items-center gap-6">
+                  <div className="text-center min-w-[60px] bg-[#F9F1ED] p-3 rounded-2xl">
+                    <span className="block text-xl font-serif text-[#A67C52] font-bold">{item.hora.substring(0,5)}</span>
+                    <span className="text-[10px] text-[#A67C52]/70 uppercase font-bold">{new Date(item.data).toLocaleDateString('pt-BR', {day: '2-digit', month: 'short'})}</span>
+                  </div>
+                  <div>
+                    <p className="font-bold text-lg text-[#5D4037]">{item.cliente_nome}</p>
+                    <p className="text-xs text-gray-400 uppercase tracking-widest font-medium">{item.servico} • {item.telefone}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => enviarWhatsApp(item)} className="p-3 bg-green-50 text-green-600 rounded-xl hover:bg-green-600 hover:text-white transition-all shadow-sm">
+                    <MessageCircle size={20} />
+                  </button>
+                  <button onClick={() => prepararEdicao(item)} className="p-3 bg-[#F9F1ED] text-[#A67C52] rounded-xl hover:bg-[#A67C52] hover:text-white transition-all shadow-sm">
+                    <Scissors size={20} />
+                  </button>
+                  <button onClick={() => solicitarCancelamento(item)} className="p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-all shadow-sm">
+                    <X size={20} />
+                  </button>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="p-20 text-center text-gray-400 italic">Nenhum agendamento encontrado.</div>
+          )}
+        </div>
+      </>
+    ) : (
+      <>
+        <div className="p-8 border-b border-gray-50">
+          <h3 className="text-2xl font-serif text-[#5D4037]">Lista de Clientes</h3>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead className="bg-[#F9F1ED] text-[#A67C52] text-xs uppercase font-bold tracking-widest">
+              <tr>
+                <th className="p-6">Nome</th>
+                <th className="p-6">WhatsApp</th>
+                <th className="p-6 text-center">Histórico</th>
+                <th className="p-6 text-right">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {listaClientes.map((cliente) => (
+                <tr key={cliente.id} className="hover:bg-[#FDF6F3] transition">
+                  <td className="p-6 font-bold text-[#5D4037]">{cliente.nome}</td>
+                  <td className="p-6 text-gray-500">{cliente.telefone}</td>
+                  <td className="p-6 text-center">
+                    <span className={`px-4 py-1 rounded-full text-[10px] font-black uppercase ${cliente.desmarques_total >= 3 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+                      {cliente.desmarques_total} desmarques
+                    </span>
+                  </td>
+                  <td className="p-6 text-right">
+                    <button 
+                      onClick={() => enviarWhatsApp({ cliente_nome: cliente.nome, telefone: cliente.telefone, servico: 'atendimento' })}
+                      className="p-3 bg-green-50 text-green-600 rounded-xl hover:bg-green-600 hover:text-white transition-all"
+                    >
+                      <MessageCircle size={18} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </>
+    )}
+  </div>
+</main>
 
       {/* MODAL NOVO AGENDAMENTO */}
       {modalAberto && (
@@ -286,7 +375,29 @@ function prepararEdicao(item) {
             </button>
             <h3 className="text-3xl font-serif mb-8">Novo Agendamento</h3>
             <form onSubmit={handleSalvar} className="space-y-5">
-              <input type="text" placeholder="Nome da Cliente" required value={nomeCliente} onChange={(e) => setNomeCliente(e.target.value)} className="w-full bg-[#FDF6F3] border border-[#EAD7CC] rounded-xl p-4 outline-none focus:ring-1 focus:ring-[#A67C52]" />
+              <div>
+            <label className="block text-xs uppercase tracking-widest text-[#A67C52] font-bold mb-2">Nome da Cliente</label>
+              <input 
+               type="text" 
+               list="clientes-list" // Conecta com a lista abaixo
+                required 
+                value={nomeCliente} 
+               onChange={(e) => {
+             setNomeCliente(e.target.value);
+           // Busca se o nome digitado já existe para preencher o telefone sozinho
+            const clienteExistente = listaClientes.find(c => c.nome === e.target.value);
+            if (clienteExistente) setTelefone(clienteExistente.telefone);
+            }}
+            className="w-full bg-[#FDF6F3] border border-[#EAD7CC] rounded-xl p-4 outline-none focus:ring-1 focus:ring-[#A67C52]" 
+          placeholder="Digite ou selecione..." 
+           />
+            {/* Esta lista alimenta o input acima */}
+              <datalist id="clientes-list">
+                {listaClientes.map(c => (
+                  <option key={c.id} value={c.nome} />
+                ))}
+              </datalist>
+            </div>
               <input type="tel" placeholder="WhatsApp" value={telefone} onChange={(e) => setTelefone(e.target.value)} className="w-full bg-[#FDF6F3] border border-[#EAD7CC] rounded-xl p-4 outline-none focus:ring-1 focus:ring-[#A67C52]" />
               <div className="grid grid-cols-2 gap-4">
                 <input type="date" required min={new Date().toISOString().split("T")[0]} value={data} onChange={(e) => setData(e.target.value)} className="w-full bg-[#FDF6F3] border border-[#EAD7CC] rounded-xl p-4 outline-none" />
