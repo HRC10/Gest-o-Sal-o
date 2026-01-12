@@ -55,6 +55,17 @@ function App() {
     .order('data_finalizacao', { ascending: false });
   if (!error) setHistoricoFinanceiro(data || []);
 }
+// FUNÇÃO DE SOMA PARA O CARD (Mês Corrente)
+  const calcularRecebidoMesAtual = () => {
+    const hoje = new Date();
+    const mesRefAtual = `${(hoje.getMonth() + 1).toString().padStart(2, '0')}/${hoje.getFullYear()}`;
+    
+    const totalMes = historicoFinanceiro
+      .filter(f => f.mes_referencia === mesRefAtual)
+      .reduce((acc, curr) => acc + (Number(curr.valor_pago) || 0), 0);
+
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalMes);
+  };
 
   async function buscarAgendamentos() {
     setCarregando(true);
@@ -343,10 +354,12 @@ function App() {
   return (
     <div className="min-h-screen bg-[#FDF6F3] flex font-sans text-[#5D4037] overflow-x-hidden">
       
+      {/* MENU MOBILE */}
       <button onClick={() => setMenuAberto(!menuAberto)} className="fixed top-4 left-4 z-[60] p-3 bg-white rounded-xl shadow-lg md:hidden text-[#A67C52]">
         {menuAberto ? <X size={24} /> : <MenuIcon size={24} />}
       </button>
 
+      {/* SIDEBAR */}
       <aside className={`w-72 bg-white shadow-2xl border-r border-[#EAD7CC] flex flex-col fixed h-full z-50 transition-transform duration-300 md:translate-x-0 ${menuAberto ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="p-8">
           <h1 className="text-2xl font-serif font-bold text-[#A67C52] leading-tight">Joanes <br/> Netto</h1>
@@ -359,338 +372,246 @@ function App() {
           <button onClick={() => { setAbaAtiva('clientes'); setMenuAberto(false); }} className={`w-full flex items-center gap-4 p-4 rounded-xl transition ${abaAtiva === 'clientes' ? 'bg-[#F9F1ED] text-[#A67C52] font-bold' : 'text-gray-500 hover:bg-gray-50'}`}>
             <Users size={20}/> Clientes
           </button>
-          <button className="w-full flex items-center gap-4 p-4 rounded-xl text-gray-500 hover:bg-gray-50 transition"><Scissors size={20}/> Serviços</button>
-         <button 
-          onClick={() => { setAbaAtiva('financeiro'); setMenuAberto(false); }} 
-          className={`w-full flex items-center gap-4 p-4 rounded-xl transition ${abaAtiva === 'financeiro' ? 'bg-[#F9F1ED] text-[#A67C52] font-bold' : 'text-gray-500 hover:bg-gray-50'}`}
-        >
-          <DollarSign size={20}/> Financeiro
-        </button>
+          <button onClick={() => { setAbaAtiva('financeiro'); setMenuAberto(false); }} className={`w-full flex items-center gap-4 p-4 rounded-xl transition ${abaAtiva === 'financeiro' ? 'bg-[#F9F1ED] text-[#A67C52] font-bold' : 'text-gray-500 hover:bg-gray-50'}`}>
+            <DollarSign size={20}/> Financeiro
+          </button>
         </nav>
       </aside>
-        <main className={`flex-1 transition-all duration-300 md:ml-72 p-4 md:p-12 max-w-full ${menuAberto ? 'blur-sm md:blur-none pointer-events-none md:pointer-events-auto' : ''}`}>
-  
-  <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12 gap-6 pt-12 md:pt-0">
-    <div>
-      <h2 className="text-3xl md:text-4xl font-serif uppercase tracking-tight">Olá, Joanes!</h2>
-      <p className="text-gray-500 mt-1">
-        {abaAtiva === 'agenda' && 'Sua agenda atualizada em tempo real.'}
-        {abaAtiva === 'clientes' && 'Gerencie sua base de clientes.'}
-        {abaAtiva === 'financeiro' && 'Acompanhe seu histórico de ganhos.'}
-      </p>
-    </div>
-    {abaAtiva === 'agenda' && (
-      <button onClick={() => { limparCampos(); setModalAberto(true); }} className="w-full md:w-auto bg-[#A67C52] hover:bg-[#8B6543] text-white px-8 py-4 rounded-full font-bold shadow-lg transition-all active:scale-95">
-        + Novo Agendamento
-      </button>
-    )}
-  </header>
 
-  {/* CARDS DE RESUMO */}
-  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-12">
-    <div className="bg-white p-6 md:p-8 rounded-[2rem] border border-[#EAD7CC] shadow-sm">
-      <Calendar className="text-[#A67C52] mb-4" size={24}/>
-      <h3 className="text-gray-400 text-xs uppercase font-bold tracking-widest">Agendamentos</h3>
-      <p className="text-4xl font-serif mt-2">
-        {dataSelecionada ? listaAgendamentos.filter(a => a.data === dataSelecionada).length : listaAgendamentos.length}
-      </p>
-    </div>
-
-    <div className="bg-white p-6 md:p-8 rounded-[2rem] border border-[#EAD7CC] shadow-sm">
-      <Users className="text-[#A67C52] mb-4" size={24}/>
-      <h3 className="text-gray-400 text-xs uppercase font-bold tracking-widest">Total Clientes</h3>
-      <p className="text-4xl font-serif mt-2">{listaClientes.length}</p>
-    </div>
-
-    <div className="bg-white p-6 md:p-8 rounded-[2rem] border border-[#EAD7CC] shadow-sm">
-      <DollarSign className="text-[#A67C52] mb-4" size={24}/>
-      <h3 className="text-gray-400 text-xs uppercase font-bold tracking-widest">Faturamento Agenda</h3>
-      <p className="text-3xl md:text-4xl font-serif mt-2">{calcularFaturamento()}</p>
-    </div>
-  </div>
-
-  <div className="bg-white rounded-[2rem] shadow-xl border border-[#EAD7CC] overflow-hidden">
-    
-    {/* ABA: AGENDA */}
-    {abaAtiva === 'agenda' && (
-      <>
-        <div className="p-4 md:p-6 bg-white border-b border-[#EAD7CC] sticky top-0 z-20">
-          <div className="flex justify-between items-center mb-4">
-            <div className="flex items-center gap-3">
-              <h3 className="text-[10px] md:text-xs uppercase tracking-widest font-black text-[#A67C52]">Navegação Rápida</h3>
-              {dataSelecionada && (
-                <button onClick={() => setDataSelecionada(null)} className="text-[10px] bg-[#A67C52] text-white px-3 py-1 rounded-full font-bold uppercase hover:bg-[#8B6543] transition-colors">Ver Todos</button>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <button type="button" disabled={offsetDias === 0} onClick={() => setOffsetDias(prev => Math.max(0, prev - 15))} className={`p-2 rounded-xl border transition-all ${offsetDias === 0 ? 'text-gray-200 border-gray-100' : 'text-[#A67C52] border-[#EAD7CC] hover:bg-[#F9F1ED]'}`}><ChevronRight size={18} className="rotate-180" /></button>
-              <button type="button" onClick={() => setOffsetDias(prev => prev + 15)} className="p-2 rounded-xl border text-[#A67C52] border-[#EAD7CC] hover:bg-[#F9F1ED] transition-all"><ChevronRight size={18} /></button>
-            </div>
+      <main className={`flex-1 transition-all duration-300 md:ml-72 p-4 md:p-12 max-w-full ${menuAberto ? 'blur-sm md:blur-none pointer-events-none md:pointer-events-auto' : ''}`}>
+        
+        <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12 gap-6 pt-12 md:pt-0">
+          <div>
+            <h2 className="text-3xl md:text-4xl font-serif uppercase tracking-tight">Olá, Joanes!</h2>
+            <p className="text-gray-500 mt-1">
+              {abaAtiva === 'agenda' && 'Sua agenda atualizada em tempo real.'}
+              {abaAtiva === 'clientes' && 'Gerencie sua base de clientes.'}
+              {abaAtiva === 'financeiro' && 'Acompanhe seu histórico de ganhos.'}
+            </p>
           </div>
+          {abaAtiva === 'agenda' && (
+            <button onClick={() => { limparCampos(); setModalAberto(true); }} className="w-full md:w-auto bg-[#A67C52] hover:bg-[#8B6543] text-white px-8 py-4 rounded-full font-bold shadow-lg transition-all active:scale-95">
+              + Novo Agendamento
+            </button>
+          )}
+        </header>
 
-          <div className="flex flex-nowrap gap-3 overflow-x-auto pb-4 scrollbar-hide touch-pan-x">
-            {[...Array(15)].map((_, i) => {
-              const d = new Date();
-              d.setDate(d.getDate() + i + offsetDias);
-              const iso = d.toISOString().split('T')[0];
-              const selecionado = dataSelecionada === iso;
-              const temAgendamento = listaAgendamentos.some(a => a.data === iso);
-
-              return (
-                <button
-                  key={iso}
-                  onClick={() => setDataSelecionada(selecionado ? null : iso)}
-                  className={`flex flex-col items-center justify-center flex-shrink-0 w-[65px] h-[85px] md:w-[75px] md:h-[95px] rounded-[22px] md:rounded-[30px] transition-all border ${
-                    selecionado ? 'bg-[#A67C52] border-[#A67C52] text-white shadow-md scale-105' : 'bg-[#FDF6F3] border-[#EAD7CC] text-[#5D4037] hover:border-[#A67C52]'
-                  }`}
-                >
-                  <span className="text-[9px] md:text-[10px] uppercase font-bold opacity-60 mb-1">{d.toLocaleDateString('pt-BR', { weekday: 'short' }).substring(0,3)}</span>
-                  <span className="text-xl md:text-2xl font-serif font-black">{d.getDate()}</span>
-                  <div className={`w-1.5 h-1.5 rounded-full mt-2 ${temAgendamento ? (selecionado ? 'bg-white' : 'bg-[#A67C52]') : 'bg-transparent'}`}></div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="p-6 md:p-8 border-b border-gray-50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <h3 className="text-xl md:text-2xl font-serif">
-            {dataSelecionada ? `Agenda: ${new Date(dataSelecionada + 'T00:00:00').toLocaleDateString('pt-BR', {day: '2-digit', month: 'long'})}` : 'Próximos Horários'}
-          </h3>
-          {carregando && <Loader2 className="animate-spin text-[#A67C52]" size={20} />}
-        </div>
-
-        <div className="divide-y divide-gray-50">
-          {(dataSelecionada ? listaAgendamentos.filter(a => a.data === dataSelecionada) : listaAgendamentos).map((item) => (
-            <div key={item.id} className="p-4 md:p-6 hover:bg-[#FDF6F3] transition group">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="flex items-center gap-4 md:gap-6">
-                  <div className="text-center min-w-[55px] md:min-w-[60px] bg-[#F9F1ED] p-2 md:p-3 rounded-2xl">
-                    <span className="block text-lg md:text-xl font-serif text-[#A67C52] font-bold">{item.hora.substring(0,5)}</span>
-                    <span className="text-[9px] text-[#A67C52]/70 uppercase font-bold">{new Date(item.data + 'T00:00:00').toLocaleDateString('pt-BR', {day: '2-digit', month: 'short'})}</span>
-                  </div>
-                  <div>
-                    <p className="font-bold text-base md:text-lg text-[#5D4037]">{item.cliente_nome}</p>
-                    <p className="text-[10px] md:text-xs text-gray-400 uppercase tracking-widest font-medium">{item.servico} • {item.telefone}</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 self-end md:self-auto">
-                  <button onClick={() => { setPagamentoId(item.id); setVTotal(item.valor_total || ''); setVPago(item.valor_pago || ''); }} className="p-2 md:p-3 bg-amber-50 text-amber-600 rounded-xl hover:bg-amber-600 hover:text-white transition-all"><DollarSign size={18} /></button>
-                  <button onClick={() => enviarWhatsApp(item)} className="p-2 md:p-3 bg-green-50 text-green-600 rounded-xl hover:bg-green-600 hover:text-white transition-all"><MessageCircle size={18} /></button>
-                  <button onClick={() => prepararEdicao(item)} className="p-2 md:p-3 bg-[#F9F1ED] text-[#A67C52] rounded-xl hover:bg-[#A67C52] hover:text-white transition-all"><Scissors size={18} /></button>
-                  <button onClick={() => setConfirmacao({ aberto: true, item })} className="p-2 md:p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-all"><X size={18} /></button>
+        {/* CARDS DE RESUMO DINÂMICOS */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-12">
+          {abaAtiva !== 'financeiro' ? (
+            <>
+              <div className="bg-white p-6 md:p-8 rounded-[2rem] border border-[#EAD7CC] shadow-sm">
+                <Calendar className="text-[#A67C52] mb-4" size={24}/>
+                <h3 className="text-gray-400 text-xs uppercase font-bold tracking-widest">Agendamentos</h3>
+                <p className="text-4xl font-serif mt-2">{dataSelecionada ? listaAgendamentos.filter(a => a.data === dataSelecionada).length : listaAgendamentos.length}</p>
+              </div>
+              <div className="bg-white p-6 md:p-8 rounded-[2rem] border border-[#EAD7CC] shadow-sm">
+                <Users className="text-[#A67C52] mb-4" size={24}/>
+                <h3 className="text-gray-400 text-xs uppercase font-bold tracking-widest">Total Clientes</h3>
+                <p className="text-4xl font-serif mt-2">{listaClientes.length}</p>
+              </div>
+              <div className="bg-white p-6 md:p-8 rounded-[2rem] border border-[#EAD7CC] shadow-sm">
+                <DollarSign className="text-[#A67C52] mb-4" size={24}/>
+                <h3 className="text-gray-400 text-xs uppercase font-bold tracking-widest">Previsto Agenda</h3>
+                <p className="text-3xl md:text-4xl font-serif mt-2">{calcularFaturamento()}</p>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="bg-white p-6 md:p-8 rounded-[2rem] border border-[#EAD7CC] shadow-sm">
+                <h3 className="text-gray-400 text-xs uppercase font-bold tracking-widest mb-2">Recebido (Mês)</h3>
+                <p className="text-4xl font-serif text-green-600">R$ {stats.recebidoMes.toFixed(2)}</p>
+              </div>
+              <div className="bg-white p-6 md:p-8 rounded-[2rem] border border-[#EAD7CC] shadow-sm">
+                <h3 className="text-gray-400 text-xs uppercase font-bold tracking-widest mb-2">Pendente (Mês)</h3>
+                <p className="text-4xl font-serif text-red-500">R$ {stats.aReceberMes.toFixed(2)}</p>
+              </div>
+              <div className="bg-white p-6 md:p-8 rounded-[2rem] border border-[#EAD7CC] shadow-sm">
+                <h3 className="text-gray-400 text-xs uppercase font-bold tracking-widest mb-2">Performance</h3>
+                <div className="flex items-center gap-2">
+                  <p className={`text-3xl font-serif ${stats.variacao >= 0 ? 'text-blue-600' : 'text-amber-600'}`}>
+                    {stats.variacao > 0 ? '+' : ''}{stats.variacao.toFixed(1)}%
+                  </p>
+                  {stats.variacao >= 0 ? <TrendingUp className="text-blue-600" /> : <TrendingDown className="text-amber-600" />}
                 </div>
               </div>
-            </div>
-          ))}
+            </>
+          )}
         </div>
-      </>
-    )}
 
-    {/* ABA: CLIENTES */}
-    {abaAtiva === 'clientes' && (
-      <div className="overflow-x-auto">
-        <table className="w-full text-left min-w-[600px]">
-          <thead className="bg-[#F9F1ED] text-[#A67C52] text-xs uppercase font-bold tracking-widest">
-            <tr>
-              <th className="p-6">Nome</th>
-              <th className="p-6 text-center">Desmarques</th>
-              <th className="p-6 text-center">Situação Financeira</th>
-              <th className="p-6 text-right">Ações</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {listaClientes.map((cliente) => (
-              <tr key={cliente.id} className="hover:bg-[#FDF6F3] transition">
-                <td className="p-6">
-                  <p className="font-bold">{cliente.nome}</p>
-                  <p className="text-xs text-gray-400">{cliente.telefone}</p>
-                </td>
-                <td className="p-6 text-center">
-                  <span className="bg-red-50 text-red-500 px-3 py-1 rounded-full text-xs font-bold">{cliente.desmarques_total || 0}</span>
-                </td>
-                <td className="p-6 text-center">
-                  {cliente.saldo_devedor > 0 ? (
-                    <span className="flex items-center justify-center gap-1 bg-red-100 text-red-600 px-3 py-1 rounded-full text-[10px] font-black uppercase mx-auto w-fit">
-                      <AlertCircle size={12}/> R$ {cliente.saldo_devedor.toFixed(2)}
-                    </span>
-                  ) : (
-                    <span className="bg-green-100 text-green-600 px-3 py-1 rounded-full text-[10px] font-black uppercase mx-auto w-fit">Em dia</span>
-                  )}
-                </td>
-                <td className="p-6 text-right">
-                  <div className="flex justify-end gap-2">
-                    <button onClick={() => enviarWhatsApp(cliente)} className="p-2 text-green-600 hover:bg-green-50 rounded-lg"><MessageCircle size={18}/></button>
-                    <button onClick={() => { setClienteEditando(cliente); setModalClienteAberto(true); }} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"><Edit size={18}/></button>
-                    <button onClick={() => excluirCliente(cliente.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={18}/></button>
+        <div className="bg-white rounded-[2rem] shadow-xl border border-[#EAD7CC] overflow-hidden">
+          
+          {/* ABA: AGENDA */}
+          {abaAtiva === 'agenda' && (
+            <>
+              <div className="p-4 md:p-6 bg-white border-b border-[#EAD7CC] sticky top-0 z-20">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-[10px] md:text-xs uppercase tracking-widest font-black text-[#A67C52]">Navegação Rápida</h3>
+                  <div className="flex gap-2">
+                    <button onClick={() => setOffsetDias(prev => Math.max(0, prev - 15))} className="p-2 rounded-xl border border-[#EAD7CC]"><ChevronRight size={18} className="rotate-180" /></button>
+                    <button onClick={() => setOffsetDias(prev => prev + 15)} className="p-2 rounded-xl border border-[#EAD7CC]"><ChevronRight size={18} /></button>
                   </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    )}
+                </div>
+                <div className="flex flex-nowrap gap-3 overflow-x-auto pb-4 scrollbar-hide">
+                  {[...Array(15)].map((_, i) => {
+                    const d = new Date(); d.setDate(d.getDate() + i + offsetDias);
+                    const iso = d.toISOString().split('T')[0];
+                    const selecionado = dataSelecionada === iso;
+                    return (
+                      <button key={iso} onClick={() => setDataSelecionada(selecionado ? null : iso)} className={`flex flex-col items-center justify-center flex-shrink-0 w-[65px] h-[85px] rounded-[22px] border transition-all ${selecionado ? 'bg-[#A67C52] text-white shadow-md' : 'bg-[#FDF6F3] text-[#5D4037]'}`}>
+                        <span className="text-[9px] uppercase font-bold mb-1">{d.toLocaleDateString('pt-BR', { weekday: 'short' }).substring(0,3)}</span>
+                        <span className="text-xl font-serif font-black">{d.getDate()}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
 
-    {/* ABA: FINANCEIRO */}
-   <div className="p-6 md:p-8">
-  {/* CARDS DE PERFORMANCE */}
-  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-    <div className="bg-white border border-[#EAD7CC] p-6 rounded-[2rem] shadow-sm">
-      <h4 className="text-gray-400 text-[10px] font-black uppercase mb-2">Recebido (Mês)</h4>
-      <p className="text-3xl font-serif text-green-600">R$ {stats.recebidoMes.toFixed(2)}</p>
-    </div>
-    <div className="bg-white border border-[#EAD7CC] p-6 rounded-[2rem] shadow-sm">
-      <h4 className="text-gray-400 text-[10px] font-black uppercase mb-2">Pendente (Mês)</h4>
-      <p className="text-3xl font-serif text-red-500">R$ {stats.aReceberMes.toFixed(2)}</p>
-    </div>
-    <div className="bg-white border border-[#EAD7CC] p-6 rounded-[2rem] shadow-sm">
-      <h4 className="text-gray-400 text-[10px] font-black uppercase mb-2">Comparativo Anterior</h4>
-      <div className="flex items-center gap-2">
-        <p className={`text-3xl font-serif ${stats.variacao >= 0 ? 'text-blue-600' : 'text-amber-600'}`}>
-          {stats.variacao > 0 ? '+' : ''}{stats.variacao.toFixed(1)}%
-        </p>
-        {stats.variacao >= 0 ? <TrendingUp className="text-blue-600" /> : <TrendingDown className="text-amber-600" />}
-      </div>
-    </div>
-  </div>
-</div>
-      <div className="p-6 md:p-8">
-        <div className="flex justify-between items-center mb-8">
-          <h3 className="text-2xl font-serif">Histórico de Recebimentos</h3>
-          <div className="bg-[#F9F1ED] p-2 rounded-xl border border-[#EAD7CC]">
-            <span className="text-[10px] font-bold text-[#A67C52] px-2">FILTRO:</span>
-            <input type="text" value={filtroMes} onChange={(e) => setFiltroMes(e.target.value)} className="bg-transparent outline-none text-sm font-bold text-[#5D4037] w-20" placeholder="MM/AAAA" />
-          </div>
-        </div>
+              <div className="divide-y divide-gray-50">
+                {(dataSelecionada ? listaAgendamentos.filter(a => a.data === dataSelecionada) : listaAgendamentos).map((item) => (
+                  <div key={item.id} className="p-4 md:p-6 hover:bg-[#FDF6F3] transition group">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div className="flex items-center gap-4">
+                        <div className="text-center min-w-[60px] bg-[#F9F1ED] p-2 rounded-2xl">
+                          <span className="block text-lg font-serif text-[#A67C52] font-bold">{item.hora.substring(0,5)}</span>
+                          <span className="text-[9px] text-[#A67C52]/70 uppercase font-bold">{new Date(item.data + 'T00:00:00').toLocaleDateString('pt-BR', {day: '2-digit', month: 'short'})}</span>
+                        </div>
+                        <div>
+                          <p className="font-bold text-[#5D4037]">{item.cliente_nome}</p>
+                          <p className="text-[10px] text-gray-400 uppercase tracking-widest">{item.servico} • {item.telefone}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 self-end md:self-auto">
+                        <button onClick={() => { setPagamentoId(item.id); setVTotal(item.valor_total || ''); setVPago(item.valor_pago || ''); }} className="p-2 bg-amber-50 text-amber-600 rounded-xl hover:bg-amber-600 hover:text-white transition-all"><DollarSign size={18} /></button>
+                        <button onClick={() => enviarWhatsApp(item)} className="p-2 bg-green-50 text-green-600 rounded-xl hover:bg-green-600 hover:text-white transition-all"><MessageCircle size={18} /></button>
+                        <button onClick={() => prepararEdicao(item)} className="p-2 bg-[#F9F1ED] text-[#A67C52] rounded-xl hover:bg-[#A67C52] hover:text-white transition-all"><Scissors size={18} /></button>
+                        <button onClick={() => setConfirmacao({ aberto: true, item })} className="p-2 bg-red-50 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-all"><X size={18} /></button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead className="text-[#A67C52] text-[10px] uppercase tracking-widest font-bold border-b border-[#F9F1ED]">
-              <tr>
-                <th className="pb-4">Data</th>
-                <th className="pb-4">Cliente</th>
-                <th className="pb-4">Serviço</th>
-                <th className="pb-4 text-right">Valor Total</th>
-                <th className="pb-4 text-right">Valor Pago</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {historicoFinanceiro
-                .filter(f => !filtroMes || f.mes_referencia === filtroMes)
-                .map((reg) => {
-                  const temDebito = (reg.valor_servico - reg.valor_pago) > 0;
-                  return (
-                    <tr key={reg.id} className={`text-sm ${temDebito ? 'bg-red-50/30' : ''}`}>
-                      <td className="py-4 text-gray-400">{new Date(reg.data_finalizacao).toLocaleDateString('pt-BR')}</td>
-                      <td className="py-4 font-bold">{reg.cliente_nome}</td>
-                      <td className="py-4 text-xs uppercase">{reg.servico}</td>
-                      <td className="py-4 text-right text-gray-400">R$ {reg.valor_servico?.toFixed(2)}</td>
-                      <td className={`py-4 text-right font-bold ${temDebito ? 'text-red-600' : 'text-green-600'}`}>
-                        R$ {reg.valor_pago?.toFixed(2)}
-                        {temDebito && <p className="text-[9px] font-black uppercase">Débito pendente</p>}
+          {/* ABA: CLIENTES */}
+          {abaAtiva === 'clientes' && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left min-w-[600px]">
+                <thead className="bg-[#F9F1ED] text-[#A67C52] text-xs uppercase font-bold tracking-widest">
+                  <tr>
+                    <th className="p-6">Nome</th>
+                    <th className="p-6 text-center">Desmarques</th>
+                    <th className="p-6 text-center">Situação Financeira</th>
+                    <th className="p-6 text-right">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {listaClientes.map((cliente) => (
+                    <tr key={cliente.id} className="hover:bg-[#FDF6F3] transition">
+                      <td className="p-6">
+                        <p className="font-bold">{cliente.nome}</p>
+                        <p className="text-xs text-gray-400">{cliente.telefone}</p>
+                      </td>
+                      <td className="p-6 text-center">
+                        <span className="bg-red-50 text-red-500 px-3 py-1 rounded-full text-xs font-bold">{cliente.desmarques_total || 0}</span>
+                      </td>
+                      <td className="p-6 text-center">
+                        {cliente.saldo_devedor > 0 ? (
+                          <span className="bg-red-100 text-red-600 px-3 py-1 rounded-full text-[10px] font-black uppercase">R$ {cliente.saldo_devedor.toFixed(2)}</span>
+                        ) : (
+                          <span className="bg-green-100 text-green-600 px-3 py-1 rounded-full text-[10px] font-black uppercase">Em dia</span>
+                        )}
+                      </td>
+                      <td className="p-6 text-right">
+                        <div className="flex justify-end gap-2">
+                          <button onClick={() => { setClienteEditando(cliente); setModalClienteAberto(true); }} className="p-2 text-blue-600"><Edit size={18}/></button>
+                          <button onClick={() => excluirCliente(cliente.id)} className="p-2 text-red-500"><Trash2 size={18}/></button>
+                        </div>
                       </td>
                     </tr>
-                  );
-                })}
-            </tbody>
-          </table>
-          {historicoFinanceiro.length === 0 && <p className="text-center py-10 text-gray-400">Nenhum registro encontrado.</p>}
-        </div>
-      </div>
-  </div>
-</main>
-      {/* NOVO MODAL: EDIÇÃO DE CLIENTE */}
-      {modalClienteAberto && clienteEditando && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[150] p-4">
-          <div className="bg-white rounded-[2rem] w-full max-w-md p-8 shadow-2xl relative">
-            <button onClick={() => setModalClienteAberto(false)} className="absolute top-6 right-6 text-gray-400"><X size={24}/></button>
-            <h3 className="text-2xl font-serif mb-6 text-[#5D4037]">Editar Cliente</h3>
-            <form onSubmit={handleSalvarEdicaoCliente} className="space-y-4">
-              <input type="text" value={clienteEditando.nome} onChange={e => setClienteEditando({...clienteEditando, nome: e.target.value})} className="w-full bg-gray-50 border p-4 rounded-2xl outline-none" placeholder="Nome" />
-              <input type="tel" value={clienteEditando.telefone} onChange={e => setClienteEditando({...clienteEditando, telefone: e.target.value})} className="w-full bg-gray-50 border p-4 rounded-2xl outline-none" placeholder="WhatsApp" />
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[10px] font-bold uppercase text-gray-400 ml-1">Saldo Devedor</label>
-                  <input type="number" value={clienteEditando.saldo_devedor} onChange={e => setClienteEditando({...clienteEditando, saldo_devedor: e.target.value})} className="w-full bg-gray-50 border p-4 rounded-2xl outline-none" />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold uppercase text-gray-400 ml-1">Desmarques</label>
-                  <input type="number" value={clienteEditando.desmarques_total} onChange={e => setClienteEditando({...clienteEditando, desmarques_total: e.target.value})} className="w-full bg-gray-50 border p-4 rounded-2xl outline-none" />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* ABA: FINANCEIRO */}
+          {abaAtiva === 'financeiro' && (
+            <div className="p-6 md:p-8">
+              <div className="flex justify-between items-center mb-8">
+                <h3 className="text-2xl font-serif">Histórico de Recebimentos</h3>
+                <div className="bg-[#F9F1ED] p-2 rounded-xl border border-[#EAD7CC]">
+                  <input type="text" value={filtroMes} onChange={(e) => setFiltroMes(e.target.value)} className="bg-transparent outline-none text-sm font-bold text-[#5D4037] w-20 text-center" placeholder="MM/AAAA" />
                 </div>
               </div>
-              <button type="submit" className="w-full bg-[#A67C52] text-white py-4 rounded-2xl font-bold shadow-lg mt-2">Salvar Alterações</button>
-            </form>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead className="text-[#A67C52] text-[10px] uppercase tracking-widest font-bold border-b border-[#F9F1ED]">
+                    <tr>
+                      <th className="pb-4">Data</th>
+                      <th className="pb-4">Cliente</th>
+                      <th className="pb-4 text-right">Total</th>
+                      <th className="pb-4 text-right">Pago</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {historicoFinanceiro.filter(f => !filtroMes || f.mes_referencia === filtroMes).map((reg) => (
+                      <tr key={reg.id} className="text-sm">
+                        <td className="py-4 text-gray-400">{new Date(reg.data_finalizacao).toLocaleDateString('pt-BR')}</td>
+                        <td className="py-4 font-bold">{reg.cliente_nome}</td>
+                        <td className="py-4 text-right text-gray-400">R$ {reg.valor_servico?.toFixed(2)}</td>
+                        <td className="py-4 text-right font-bold text-green-600">R$ {reg.valor_pago?.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      </main>
+
+      {/* MODAIS (EDIÇÃO, NOVO AGENDAMENTO, AVISOS, ETC) */}
+      {/* ... [mantenha seus modais de Edição Cliente e Novo Agendamento aqui] ... */}
+
+      {/* MODAL DE PAGAMENTO (ADICIONADO) */}
+      {pagamentoId && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[200] p-4">
+          <div className="bg-white rounded-[2rem] w-full max-w-sm p-8 shadow-2xl">
+            <h3 className="text-2xl font-serif mb-6 text-[#5D4037]">Finalizar Atendimento</h3>
+            <div className="space-y-4">
+              <input type="number" value={vTotal} onChange={(e) => setVTotal(e.target.value)} className="w-full bg-gray-50 border p-4 rounded-2xl outline-none" placeholder="Valor do Serviço" />
+              <input type="number" value={vPago} onChange={(e) => setVPago(e.target.value)} className="w-full bg-gray-50 border p-4 rounded-2xl outline-none focus:border-green-500" placeholder="Quanto foi pago?" />
+              <div className="flex gap-3 pt-4">
+                <button onClick={() => setPagamentoId(null)} className="flex-1 py-4 font-bold text-gray-400">Voltar</button>
+                <button onClick={() => salvarPagamento(listaAgendamentos.find(a => a.id === pagamentoId))} className="flex-1 bg-green-600 text-white py-4 rounded-2xl font-bold shadow-lg">Finalizar</button>
+              </div>
+            </div>
           </div>
         </div>
       )}
 
-      {modalAberto && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end md:items-center justify-center z-[100] p-0 md:p-4">
-          <div className="bg-white rounded-t-[2.5rem] md:rounded-[2.5rem] w-full max-w-lg p-6 md:p-10 shadow-2xl relative h-[95vh] md:h-auto overflow-y-auto">
-            <button onClick={() => setModalAberto(false)} className="absolute top-6 right-6 text-gray-400 hover:text-gray-600 p-2"><X size={28}/></button>
-            <h3 className="text-2xl md:text-3xl font-serif mb-8 text-[#5D4037]">{idEditando ? 'Editar Horário' : 'Novo Agendamento'}</h3>
-            <form onSubmit={handleSalvar} className="space-y-4 md:space-y-5 pb-10">
-              <div>
-                <label className="block text-[10px] uppercase tracking-widest text-[#A67C52] font-bold mb-2">Nome da Cliente</label>
-                <input type="text" list="clientes-list" required value={nomeCliente} onChange={(e) => {
-                    setNomeCliente(e.target.value);
-                    const clienteExistente = listaClientes.find(c => c.nome === e.target.value);
-                    if (clienteExistente) setTelefone(clienteExistente.telefone);
-                  }} className="w-full bg-[#FDF6F3] border border-[#EAD7CC] rounded-2xl p-4 outline-none focus:ring-2 focus:ring-[#A67C52]/20" placeholder="Nome completo..." />
-                <datalist id="clientes-list">{listaClientes.map(c => <option key={c.id} value={c.nome} />)}</datalist>
-              </div>
-              <div>
-                <label className="block text-[10px] uppercase tracking-widest text-[#A67C52] font-bold mb-2">WhatsApp</label>
-                <input type="tel" placeholder="(00) 00000-0000" value={telefone} onChange={(e) => setTelefone(e.target.value)} className="w-full bg-[#FDF6F3] border border-[#EAD7CC] rounded-2xl p-4 outline-none" />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] uppercase tracking-widest text-[#A67C52] font-bold mb-2">Data</label>
-                  <input type="date" required value={data} onChange={(e) => setData(e.target.value)} className="w-full bg-[#FDF6F3] border border-[#EAD7CC] rounded-2xl p-4 outline-none" />
-                </div>
-                <div>
-                  <label className="block text-[10px] uppercase tracking-widest text-[#A67C52] font-bold mb-2">Hora</label>
-                  <input type="time" required value={hora} onChange={(e) => setHora(e.target.value)} className="w-full bg-[#FDF6F3] border border-[#EAD7CC] rounded-2xl p-4 outline-none" />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[10px] uppercase tracking-widest text-[#A67C52] font-bold mb-2">Serviço</label>
-                <select value={servico} onChange={(e) => setServico(e.target.value)} className="w-full bg-[#FDF6F3] border border-[#EAD7CC] rounded-2xl p-4 outline-none">
-                  <option>Volume Russo</option>
-                  <option>Volume Híbrido</option>
-                  <option>Design de Sobrancelha</option>
-                  <option>Limpeza de Pele</option>
-                </select>
-              </div>
-              <button type="submit" className="w-full bg-[#5D4037] text-white py-4 md:py-5 rounded-2xl font-bold text-lg hover:bg-[#3E2B25] shadow-lg mt-4 active:scale-95 transition-all uppercase tracking-widest">
-                {idEditando ? 'Salvar Alterações' : 'Confirmar'}
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-
+      {/* MODAL DE AVISOS */}
       {aviso.aberto && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[200] p-4">
-          <div className="bg-white rounded-[2rem] w-full max-w-sm p-8 shadow-2xl text-center border border-[#EAD7CC]">
-            <h3 className="text-2xl font-serif mb-2 text-[#5D4037]">{aviso.titulo}</h3>
+          <div className="bg-white rounded-[2rem] w-full max-w-sm p-8 shadow-2xl text-center">
+            <h3 className="text-2xl font-serif mb-2">{aviso.titulo}</h3>
             <p className="text-gray-500 mb-8">{aviso.mensagem}</p>
             <button onClick={() => setAviso({ ...aviso, aberto: false })} className="w-full bg-[#A67C52] text-white py-4 rounded-xl font-bold">Entendi</button>
           </div>
         </div>
       )}
 
+      {/* MODAL DE CONFIRMAÇÃO CANCELAMENTO */}
       {confirmacao.aberto && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[150] p-4">
-          <div className="bg-white rounded-[2rem] w-full max-w-sm p-8 shadow-2xl text-center border border-[#EAD7CC]">
+          <div className="bg-white rounded-[2rem] w-full max-w-sm p-8 shadow-2xl text-center">
             <h3 className="text-2xl font-serif mb-2 text-[#5D4037]">Cancelar Horário?</h3>
             <p className="text-gray-500 mb-8">Deseja remover o agendamento de <span className="font-bold">{confirmacao.item?.cliente_nome}</span>?</p>
             <div className="flex gap-3">
-              <button onClick={() => setConfirmacao({ aberto: false, item: null })} className="flex-1 bg-gray-100 py-4 rounded-xl font-bold">Voltar</button>
-              <button onClick={executarCancelamento} className="flex-1 bg-red-500 text-white py-4 rounded-xl font-bold">Confirmar</button>
+              <button onClick={() => setConfirmacao({ aberto: false, item: null })} className="flex-1 bg-gray-100 py-4 rounded-xl font-bold text-gray-500">Voltar</button>
+              <button onClick={executarCancelamento} className="flex-1 bg-red-500 text-white py-4 rounded-xl font-bold shadow-lg">Confirmar</button>
             </div>
           </div>
         </div>
